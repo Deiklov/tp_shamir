@@ -3,10 +3,10 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"github.com/SSSaaS/sssa-golang"
 	"log"
 	"os"
 	"strings"
-	"github.com/SSSaaS/sssa-golang"
 )
 
 type resp struct {
@@ -47,10 +47,13 @@ func splitmode() {
 	if privateKey == "" || T < 2 || N > 100 || T > N {
 		log.Fatal("Incorrect input data")
 	}
-	sssa_golang.Create()
-	fmt.Println(privateKey)
-	fmt.Println(privateKey)
-	fmt.Println(privateKey)
+	keyParts, err := sssa.Create(T, N, privateKey)
+	if err != nil {
+		log.Fatalf("Cann't devide key to parts %s", err.Error())
+	}
+	for _, v := range keyParts {
+		fmt.Println(v)
+	}
 }
 func recovermode() {
 	input := bufio.NewScanner(os.Stdin) //Creating a Scanner that will read the input from the console
@@ -60,6 +63,13 @@ func recovermode() {
 			break
 		}
 		arrSecretParts = append(arrSecretParts, input.Text())
+
 	}
-	fmt.Println("it's all secrets")
+	fmt.Println("Full secret key")
+	fullPrivateKey, err := sssa.Combine(arrSecretParts)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(fullPrivateKey)
+
 }

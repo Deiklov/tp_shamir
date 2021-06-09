@@ -31,7 +31,7 @@ func HandleCommonString(common string, tasks chan<- string) {
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
-
+	fmt.Println("closing tasks queue")
 	close(tasks)
 }
 
@@ -65,23 +65,30 @@ func worker(group *sync.WaitGroup, tasks <-chan string, results chan<- int) {
 func main() {
 	var wg sync.WaitGroup
 	n := 5
-	tasks := make(chan string, 1000)
-	results := make(chan int, 1000)
-	input := "https://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\n"
+	tasks := make(chan string, 7)
+	results := make(chan int, 7)
+	input := "https://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\n"
 
 	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go worker(&wg, tasks, results)
 	}
-	HandleCommonString(input, tasks)
+
+	go HandleCommonString(input, tasks)
 
 	//ждем пока все воркеры отработают
 	var sum int
-	wg.Wait()
-	close(results)
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
 	//читаем уже из закрытого канала
 	for v := range results {
+		//fmt.Println(v)
 		sum += v
 	}
+
 	fmt.Printf("total %d\n", sum)
 }

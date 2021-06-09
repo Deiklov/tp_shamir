@@ -1,75 +1,87 @@
+//Процессу на stdin приходят строки, содержащие интересующие нас URL. Каждый такой URL нужно дернуть и посчитать кол-во вхождений строки "Go" в ответе. В конце работы приложение выводит на экран общее кол-во найденных строк "Go" во всех запросах, например:
+//$ echo -e 'https://golang.org\nhttps://golang.org\nhttps://golang.org' | go counter.go
+//Count for https://golang.org: 9
+//Count for https://golang.org: 9
+//Count for https://golang.org: 9
+//Total: 27
+//
+//Введенный URL должен начать обрабатываться сразу после вычитывания и параллельно с вычитыванием следующего. URL должны обрабатываться параллельно, но не более k=5 одновременно. Обработчики url-ов не должны порождать лишних горутин, т.е. если k=1000 а обрабатываемых URL-ов нет, не должно создаваться 1000 горутин. Нужно обойтись без глобальных переменных и использовать только стандартные библиотеки.
+//Поддерживает ключи: k - количество горутин обрабатывающих урлы (по дефолту 5) q - поисковое слово (по дефлоту go)
 package main
 
 import (
 	"bufio"
 	"fmt"
-	"github.com/SSSaaS/sssa-golang"
+	"io/ioutil"
 	"log"
-	"os"
+	"net/http"
 	"strings"
+	"sync"
+	"time"
 )
 
-type resp struct {
-	Name         string
-	TicketNumber int
-}
-
-const (
-	splitMode   = "split"
-	recoverMode = "recover"
-)
-
-func main() {
-	if len(os.Args) < 2 {
-		log.Fatal("Please specify working mode")
-	}
-	var workMode = os.Args[1]
-	// parse flag's options
-	fmt.Printf("Program work in %s mode\n", strings.ToUpper(workMode))
-	switch workMode {
-	case splitMode:
-		splitmode()
-	case recoverMode:
-		recovermode()
-	default:
-		log.Fatal("Please specify mode: splitmode or recover")
+func HandleCommonString(common string, tasks chan<- string) {
+	scanner := bufio.NewScanner(strings.NewReader(common))
+	for scanner.Scan() {
+		//прочитали строку и скинули пулу
+		//fmt.Println(scanner.Text())
+		tasks <- scanner.Text()
 	}
 
-}
-func splitmode() {
-	var privateKey string
-	var N int
-	var T int
-	fmt.Println("Please enter your private key")
-	_, _ = fmt.Scanf("%s\n", &privateKey)
-	fmt.Println("Enter count of all part and count of access part")
-	_, _ = fmt.Scanf("%d %d \n", &N, &T)
-	if privateKey == "" || T < 2 || N > 100 || T > N {
-		log.Fatal("Incorrect input data")
-	}
-	keyParts, err := sssa.Create(T, N, privateKey)
-	if err != nil {
-		log.Fatalf("Cann't devide key to parts %s", err.Error())
-	}
-	for _, v := range keyParts {
-		fmt.Println(v)
-	}
-}
-func recovermode() {
-	input := bufio.NewScanner(os.Stdin) //Creating a Scanner that will read the input from the console
-	arrSecretParts := make([]string, 0)
-	for input.Scan() {
-		if input.Text() == "" {
-			break
-		}
-		arrSecretParts = append(arrSecretParts, input.Text())
-
-	}
-	fmt.Println("Full secret key")
-	fullPrivateKey, err := sssa.Combine(arrSecretParts)
-	if err != nil {
+	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(fullPrivateKey)
 
+	close(tasks)
+}
+
+func worker(group *sync.WaitGroup, tasks <-chan string, results chan<- int) {
+	client := http.Client{
+		Timeout: 15 * time.Second,
+	}
+	//все воркеры смотрят в один канал, забирают из него таски, пишут в общий канал results
+	for v := range tasks {
+		//делаем http request и подсчет числа слов
+		resp, err := client.Get(v)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		html, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		//отправляем кол-во слов в стопку с результатами
+		countWrd := strings.Count(string(html), "go")
+
+		fmt.Printf("Count for %s : %d\n", v, countWrd)
+		results <- countWrd
+		//ждем, пока таски не закончатся
+	}
+	group.Done()
+}
+
+func main() {
+	var wg sync.WaitGroup
+	n := 5
+	tasks := make(chan string, 1000)
+	results := make(chan int, 1000)
+	input := "https://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\n"
+
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go worker(&wg, tasks, results)
+	}
+	HandleCommonString(input, tasks)
+
+	//ждем пока все воркеры отработают
+	var sum int
+	wg.Wait()
+	close(results)
+	//читаем уже из закрытого канала
+	for v := range results {
+		sum += v
+	}
+	fmt.Printf("total %d\n", sum)
 }

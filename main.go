@@ -67,6 +67,7 @@ func main() {
 	n := 5
 	tasks := make(chan string, 7)
 	results := make(chan int, 7)
+	endChan := make(chan struct{})
 	input := "https://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/\nhttps://golang.org\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\nhttps://golang.org/doc/effective_go\n"
 
 	for i := 0; i < n; i++ {
@@ -81,14 +82,32 @@ func main() {
 
 	go func() {
 		wg.Wait()
-		close(results)
+		//close(results)
+		endChan <- struct{}{}
 	}()
 
 	//читаем уже из закрытого канала
-	for v := range results {
-		//fmt.Println(v)
-		sum += v
-	}
+	var data int
+	endChanmy := make(chan struct{})
+
+	go func(endChanmy chan<- struct{}) {
+		for {
+			select {
+			case data = <-results:
+				sum += data
+			case <-endChan:
+				endChanmy <- struct{}{}
+				return
+			}
+		}
+	}(endChanmy)
+	//ждем select
+	<-endChanmy
+
+	//for v := range results {
+	//	//fmt.Println(v)
+	//	sum += v
+	//}
 
 	fmt.Printf("total %d\n", sum)
 }
